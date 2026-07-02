@@ -31,6 +31,14 @@ class Settings(BaseSettings):
         default=1024,
         description="Máximo de tokens de saída por resposta do agente",
     )
+    gemini_embedding_dim: int = Field(
+        default=768,
+        description=(
+            "Dimensão dos vetores gerados pelo modelo de embedding configurado "
+            "(conferir o valor correto para o modelo escolhido em "
+            "https://ai.google.dev/gemini-api/docs/embeddings)."
+        ),
+    )
 
     # --- Aplicação -----------------------------------------------------------
     app_env: str = Field(default="development")
@@ -41,7 +49,7 @@ class Settings(BaseSettings):
     # itens de pedido, pedidos, produtos e promoções (CSV), além do PDF de
     # políticas da loja usado pelo RAG.
     data_dir: Path = Field(default=Path("data"))
-    policies_pdf_path: Path = Field(default=Path("data/políticas_da_loja.pdf"))
+    policies_pdf_path: Path = Field(default=Path("data/políticas.pdf"))
 
     # --- RAG (futuro) ----------------------------------------------------------
     vector_store_path: Path = Field(default=Path("storage/vector_store"))

@@ -25,7 +25,12 @@ class BaseVectorStore(ABC):
         """Cria um embedding para o texto fornecido."""
 
         return GeminiLLMClient().create_embedding(text)
-    
+
+    @abstractmethod
+    def store_embedding(self, embedding: list[float], document: VectorDocument) -> None:
+        """Armazena o embedding no vector store associado ao documento."""
+        raise NotImplementedError
+
     def add_documents(self, documents: list[VectorDocument]) -> None:
         """Adiciona (ou atualiza) documentos/chunks no índice vetorial."""
         

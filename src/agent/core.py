@@ -20,7 +20,7 @@ from dataclasses import dataclass
 
 from agent.llm_client import GeminiLLMClient
 from memory.conversation_history import BaseConversationHistoryStore
-from rag.retriever import BaseRetriever
+from rag.retriever import Retriever
 from tabular_data.service import BaseTabularDataService
 from utils.logger import get_logger
 
@@ -37,7 +37,7 @@ class AgentDependencies:
     """
 
     llm_client: GeminiLLMClient
-    retriever: BaseRetriever | None = None
+    retriever: Retriever | None = None
     tabular_data_service: BaseTabularDataService | None = None
     history_store: BaseConversationHistoryStore | None = None
 
@@ -56,7 +56,11 @@ class EmporioMusicaAgent:
         final + chamada ao LLM). Nenhuma lógica de negócio, prompt ou
         ferramenta está implementada nesta versão inicial.
         """
-        raise NotImplementedError(
-            "Implementar o pipeline de atendimento do agente "
-            f"(session_id={session_id!r})."
+
+        logger.debug(
+            "Recebida mensagem do usuário (session_id=%s): %r",
+            session_id,
+            user_message,
         )
+
+        
