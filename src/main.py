@@ -18,6 +18,8 @@ from rag.pdf_indexer import PdfPolicyIndexer
 from rag.retriever import Retriever
 from tabular_data.pandas_service import PandasTabularDataService
 from memory.json_history_store import JsonConversationHistoryStore
+from tools.catalog_tools import SearchProductsTool, CheckOrderStatusTool
+from tools.policy_tools import SearchStorePoliciesTool
 
 app = typer.Typer(help="Agente de atendimento (CLI) da loja Empório da Música.")
 
@@ -46,6 +48,11 @@ def chat() -> None:
         retriever=retriever,
         tabular_data_service=PandasTabularDataService(settings=settings),
         conversation_history_store=JsonConversationHistoryStore(storage_dir=settings.history_storage_dir),
+        tools=[
+            SearchProductsTool(tabular_data_service=PandasTabularDataService(settings=settings)),
+            CheckOrderStatusTool(tabular_data_service=PandasTabularDataService(settings=settings)),
+            SearchStorePoliciesTool(retriever=retriever),
+        ],
     )
     agent = EmporioMusicaAgent(dependencies=dependencies)
 
