@@ -16,6 +16,8 @@ from config import get_settings
 from rag.in_memory import InMemoryVectorStore
 from rag.pdf_indexer import PdfPolicyIndexer
 from rag.retriever import Retriever
+from tabular_data.pandas_service import PandasTabularDataService
+from memory.json_history_store import JsonConversationHistoryStore
 
 app = typer.Typer(help="Agente de atendimento (CLI) da loja Empório da Música.")
 
@@ -42,6 +44,8 @@ def chat() -> None:
     dependencies = AgentDependencies(
         llm_client=GeminiLLMClient(settings=settings),
         retriever=retriever,
+        tabular_data_service=PandasTabularDataService(settings=settings),
+        conversation_history_store=JsonConversationHistoryStore(storage_dir=settings.history_storage_dir),
     )
     agent = EmporioMusicaAgent(dependencies=dependencies)
 
