@@ -31,12 +31,16 @@ class Settings(BaseSettings):
         default=1024,
         description="Máximo de tokens de saída por resposta do agente",
     )
+    gemini_embedding_model: str = Field(
+        default="gemini-embedding-001",
+        description="ID do modelo Gemini usado para gerar embeddings (RAG).",
+    )
     gemini_embedding_dim: int = Field(
         default=768,
         description=(
-            "Dimensão dos vetores gerados pelo modelo de embedding configurado "
-            "(conferir o valor correto para o modelo escolhido em "
-            "https://ai.google.dev/gemini-api/docs/embeddings)."
+            "Dimensão solicitada dos vetores de embedding via "
+            "`output_dimensionality` (o modelo `gemini-embedding-001` "
+            "aceita valores menores que o padrão de 3072, ex.: 768 ou 1536)."
         ),
     )
 

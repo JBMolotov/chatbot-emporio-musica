@@ -29,10 +29,12 @@ class EmbeddingModel(str):
     """Enumeração de modelos de embedding do Gemini.
 
     Usar `str` como superclasse permite passar diretamente para
-    `genai.Client.embeddings.create(...)`.
+    `genai.Client.models.embed_content(...)`.
     """
 
-    GEMINI_EMBEDDING_1 = "gemini-embedding-1"
+    GEMINI_EMBEDDING_001 = "gemini-embedding-001"
+    GEMINI_EMBEDDING_2 = "gemini-embedding-2"
+    GEMINI_EMBEDDING_2_PREVIEW = "gemini-embedding-2-preview"
 
 class GeminiLLMClient:
     """Encapsula a criação e o uso do client oficial do Google Gemini."""
@@ -52,11 +54,12 @@ class GeminiLLMClient:
             Embedding como lista de floats.
         """
         model_to_use = model or self._settings.gemini_embedding_model
-        response = self._client.embeddings.create(
+        response = self._client.models.embed_content(
             model=model_to_use,
-            input=text,
+            contents=text,
+            config={"output_dimensionality": self._settings.gemini_embedding_dim},
         )
-        return response.data[0].embedding
+        return response.embeddings[0].values
 
     def generate_response(
         self,
