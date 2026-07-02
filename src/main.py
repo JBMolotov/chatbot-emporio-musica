@@ -21,6 +21,8 @@ app = typer.Typer(help="Agente de atendimento (CLI) da loja Empório da Música.
 def _main() -> None:
     """Agente de atendimento (CLI) da loja Empório da Música."""
 
+    
+
 
 @app.command()
 def chat() -> None:

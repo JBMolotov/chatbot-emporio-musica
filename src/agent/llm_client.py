@@ -25,6 +25,14 @@ from utils.logger import get_logger
 
 logger = get_logger(__name__)
 
+class EmbeddingModel(str):
+    """Enumeração de modelos de embedding do Gemini.
+
+    Usar `str` como superclasse permite passar diretamente para
+    `genai.Client.embeddings.create(...)`.
+    """
+
+    GEMINI_EMBEDDING_1 = "gemini-embedding-1"
 
 class GeminiLLMClient:
     """Encapsula a criação e o uso do client oficial do Google Gemini."""
@@ -32,6 +40,23 @@ class GeminiLLMClient:
     def __init__(self, settings: Settings | None = None) -> None:
         self._settings = settings or get_settings()
         self._client = genai.Client(api_key=self._settings.google_api_key)
+
+    def create_embedding(self, text: str, model: EmbeddingModel | None = None) -> list[float]:
+        """Cria um embedding para o texto fornecido.
+
+        Args:
+            text: Texto a ser transformado em embedding.
+            model: Modelo de embedding a ser usado (opcional, padrão do settings).
+
+        Returns:
+            Embedding como lista de floats.
+        """
+        model_to_use = model or self._settings.gemini_embedding_model
+        response = self._client.embeddings.create(
+            model=model_to_use,
+            input=text,
+        )
+        return response.data[0].embedding
 
     def generate_response(
         self,
