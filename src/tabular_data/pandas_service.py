@@ -31,15 +31,16 @@ class PandasTabularDataService(BaseTabularDataService):
         """
         Pesquisa produtos por nome/descrição e aplica filtros opcionais.
         """
-        results = self.products_df[self.products_df["name"].str.contains(query, case=False, na=False)]
-        return results
+        matches_name = self.products_df["name"].str.contains(query, case=False, na=False)
+        matches_description = self.products_df["description"].str.contains(query, case=False, na=False)
+        return self.products_df[matches_name | matches_description]
 
     def get_product_by_id(self, product_id: int) -> Optional[Dict]:
         """
         Retorna o produto pelo ID.
         """
         product = self.products_df[self.products_df["product_id"] == product_id]
-        return product.to_dict(orient="records")[0] if not product.empty else None
+        return self._first_row_or_none(product)
 
     def check_stock(self, product_id: int) -> Optional[int]:
         """
@@ -69,4 +70,12 @@ class PandasTabularDataService(BaseTabularDataService):
         Retorna o status do pedido pelo ID.
         """
         order = self.orders_df[self.orders_df["order_id"] == order_id]
-        return order.to_dict(orient="records")[0] if not order.empty else None
+        return self._first_row_or_none(order)
+
+    @staticmethod
+    def _first_row_or_none(df: DataFrame) -> Optional[Dict]:
+        """Converte a primeira linha em dict, trocando `NaN` por `None` (JSON-compatível)."""
+        if df.empty:
+            return None
+        row = df.where(df.notna(), None)
+        return row.to_dict(orient="records")[0]

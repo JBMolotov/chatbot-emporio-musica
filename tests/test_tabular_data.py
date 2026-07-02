@@ -24,7 +24,17 @@ class TestSearchProducts:
         results = service.search_products(query)
 
         assert not results.empty
-        assert results["name"].str.contains(query, case=False).all()
+        matches_name = results["name"].str.contains(query, case=False)
+        matches_description = results["description"].str.contains(query, case=False, na=False)
+        assert (matches_name | matches_description).all()
+
+    def test_finds_by_description_when_name_does_not_match(self, service: PandasTabularDataService) -> None:
+        # "Violão" não aparece em nenhum `name` (os produtos são nomeados por
+        # marca/modelo), só em `description` — cobre a busca combinada.
+        results = service.search_products("violão")
+
+        assert not results.empty
+        assert results["description"].str.contains("violão", case=False, na=False).all()
 
     def test_no_match_returns_empty(self, service: PandasTabularDataService) -> None:
         results = service.search_products("xxxxxxxxxxxxnaoexiste")
