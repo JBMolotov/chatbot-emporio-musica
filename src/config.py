@@ -1,4 +1,5 @@
-"""Configuração central da aplicação."""
+"""Configuração central da aplicação.
+"""
 
 from __future__ import annotations
 
@@ -9,7 +10,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    """Configurações da aplicação, carregadas de variáveis de ambiente"""
+    """Configurações da aplicação, carregadas de variáveis de ambiente / `.env`."""
 
     model_config = SettingsConfigDict(
         env_file=".env",
