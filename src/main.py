@@ -13,12 +13,12 @@ from agent.core import AgentDependencies, EmporioMusicaAgent
 from agent.llm_client import GeminiLLMClient
 from cli.interface import run_chat_loop
 from config import get_settings
+from memory.json_history_store import JsonConversationHistoryStore
 from rag.in_memory import InMemoryVectorStore
 from rag.pdf_indexer import PdfPolicyIndexer
 from rag.retriever import Retriever
 from tabular_data.pandas_service import PandasTabularDataService
-from memory.json_history_store import JsonConversationHistoryStore
-from tools.catalog_tools import SearchProductsTool, CheckOrderStatusTool
+from tools.catalog_tools import CheckOrderStatusTool, SearchProductsTool
 from tools.policy_tools import SearchStorePoliciesTool
 
 app = typer.Typer(help="Agente de atendimento (CLI) da loja Empório da Música.")
@@ -42,15 +42,16 @@ def chat() -> None:
         indexer.index_documents(settings.policies_pdf_path)
         vector_store.persist()
     retriever = Retriever(vector_store)
+    tabular_data_service = PandasTabularDataService(settings=settings)
 
     dependencies = AgentDependencies(
         llm_client=GeminiLLMClient(settings=settings),
         retriever=retriever,
-        tabular_data_service=PandasTabularDataService(settings=settings),
-        conversation_history_store=JsonConversationHistoryStore(storage_dir=settings.history_storage_dir),
+        tabular_data_service=tabular_data_service,
+        history_store=JsonConversationHistoryStore(storage_dir=str(settings.conversation_history_path)),
         tools=[
-            SearchProductsTool(tabular_data_service=PandasTabularDataService(settings=settings)),
-            CheckOrderStatusTool(tabular_data_service=PandasTabularDataService(settings=settings)),
+            SearchProductsTool(tabular_data_service=tabular_data_service),
+            CheckOrderStatusTool(tabular_data_service=tabular_data_service),
             SearchStorePoliciesTool(retriever=retriever),
         ],
     )
