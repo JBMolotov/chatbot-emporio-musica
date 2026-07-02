@@ -6,10 +6,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-import pytest
-
 from agent.core import AgentDependencies, EmporioMusicaAgent
-from config import Settings
 from memory.conversation_history import ConversationMessage, MessageRole
 from memory.json_history_store import JsonConversationHistoryStore
 from rag.vector_store import VectorDocument
@@ -34,16 +31,15 @@ class _FakeRetriever:
         return self._documents
 
 
-def test_handle_message_without_optional_deps_raises_not_implemented() -> None:
-    # Mesmo teste de "esqueleto" de tests/test_placeholder.py, mas via GeminiLLMClient
-    # real (sem API key) só para garantir que None em retriever/tools/history não quebra.
-    from agent.llm_client import GeminiLLMClient
+def test_handle_message_without_optional_deps_does_not_crash() -> None:
+    # retriever, tabular_data_service, history_store e tools são todos opcionais
+    # (None por padrão) — handle_message não pode quebrar sem eles.
+    llm_client = _FakeLLMClient()
+    agent = EmporioMusicaAgent(AgentDependencies(llm_client=llm_client))
 
-    settings = Settings(google_api_key="test-key")
-    agent = EmporioMusicaAgent(AgentDependencies(llm_client=GeminiLLMClient(settings=settings)))
+    response = agent.handle_message(session_id="s1", user_message="olá")
 
-    with pytest.raises(NotImplementedError):
-        agent.handle_message(session_id="s1", user_message="olá")
+    assert response == "resposta do assistente"
 
 
 def test_handle_message_builds_system_prompt_with_retrieved_context() -> None:

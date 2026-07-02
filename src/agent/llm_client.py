@@ -2,28 +2,26 @@
 
 Mantém toda a interação direta com `genai.Client` isolada em um único
 lugar, para que `agent.core` dependa apenas desta interface.
-
-TODO (implementação futura):
-    - Implementar `generate_response`, decidindo entre chamada simples
-      (`client.models.generate_content`) e streaming
-      (`client.models.generate_content_stream`) conforme o tamanho
-      esperado da resposta.
-    - Definir `generation_config` (temperature, max_output_tokens etc.) e,
-      se necessário, `safety_settings`.
-    - Tratar `finish_reason` (`STOP`, `MAX_TOKENS`, `SAFETY`, chamadas de
-      function calling, etc.).
 """
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from google import genai
+from google.genai import types
 
 from config import Settings, get_settings
 from utils.logger import get_logger
 
+if TYPE_CHECKING:
+    from tools.base import BaseTool
+
 logger = get_logger(__name__)
+
+# Limite de idas-e-voltas de function calling numa mesma pergunta, para
+# evitar loop infinito caso o modelo insista em chamar tools.
+_MAX_FUNCTION_CALL_ROUNDS = 5
 
 class EmbeddingModel(str):
     """Enumeração de modelos de embedding do Gemini.
@@ -66,16 +64,72 @@ class GeminiLLMClient:
         *,
         system: str,
         messages: list[dict[str, Any]],
-        tools: list[dict[str, Any]] | None = None,
-    ) -> Any:
-        """Envia uma conversa ao modelo e retorna a resposta.
+        tools: list["BaseTool"] | None = None,
+    ) -> str:
+        """Envia uma conversa ao modelo e retorna o texto da resposta final.
 
-        Ponto de extensão: aqui entra a chamada real a
-        `self._client.models.generate_content(...)` (ou
-        `.generate_content_stream(...)`), a instrução de sistema final e o
-        eventual loop de function calling.
+        Recebe as `tools` de verdade (não só as declarações) porque, quando o
+        modelo pede uma function call, é preciso executá-la (`tool.run(...)`)
+        e devolver o resultado para o modelo, que então gera a resposta final.
         """
-        raise NotImplementedError(
-            "Implementar a chamada ao modelo Gemini "
-            f"(model={self._settings.gemini_model!r})."
+        contents: list[types.Content] = [
+            types.Content(role=m["role"], parts=[types.Part(text=m["content"])]) for m in messages
+        ]
+        tools_by_name = {tool.name: tool for tool in (tools or [])}
+        config = types.GenerateContentConfig(
+            system_instruction=system,
+            max_output_tokens=self._settings.gemini_max_output_tokens,
+            tools=[
+                types.Tool(
+                    function_declarations=[
+                        types.FunctionDeclaration(**tool.to_gemini_function_declaration()) for tool in tools
+                    ]
+                )
+            ]
+            if tools
+            else None,
         )
+
+        for _ in range(_MAX_FUNCTION_CALL_ROUNDS):
+            response = self._client.models.generate_content(
+                model=self._settings.gemini_model,
+                contents=contents,
+                config=config,
+            )
+            candidate_content = response.candidates[0].content
+            function_calls = [part.function_call for part in candidate_content.parts if part.function_call]
+
+            if not function_calls:
+                return response.text
+
+            contents.append(candidate_content)
+            contents.append(
+                types.Content(
+                    role="user",
+                    parts=[
+                        types.Part(
+                            function_response=types.FunctionResponse(
+                                name=call.name,
+                                response={"result": self._run_tool(tools_by_name, call)},
+                            )
+                        )
+                        for call in function_calls
+                    ],
+                )
+            )
+
+        raise RuntimeError(
+            f"O modelo excedeu o limite de {_MAX_FUNCTION_CALL_ROUNDS} chamadas de "
+            "ferramentas para uma única mensagem."
+        )
+
+    @staticmethod
+    def _run_tool(tools_by_name: dict[str, "BaseTool"], call: types.FunctionCall) -> Any:
+        tool = tools_by_name.get(call.name)
+        if tool is None:
+            return {"error": f"Ferramenta '{call.name}' não existe."}
+        try:
+            return tool.run(**(call.args or {}))
+        except Exception as exc:  # ferramenta com input inválido, dado inexistente etc.
+            logger.warning("Ferramenta '%s' falhou com args=%r: %s", call.name, call.args, exc)
+            return {"error": str(exc)}

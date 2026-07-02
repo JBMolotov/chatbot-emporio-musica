@@ -77,12 +77,10 @@ class EmporioMusicaAgent:
         # Chamar o LLM para gerar a resposta, passando o prompt de sistema, o
         # histórico + nova mensagem do usuário e as tools disponíveis.
 
-        tools = [t.to_gemini_function_declaration() for t in self._deps.tools] if self._deps.tools else []
-
         llm_response = self._deps.llm_client.generate_response(
             system=system_prompt,
             messages=messages,
-            tools=tools,
+            tools=self._deps.tools,
         )
 
         # Persistir a nova troca de mensagens no histórico (usuário + assistente).
