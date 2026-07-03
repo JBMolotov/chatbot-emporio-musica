@@ -1,0 +1,52 @@
+[project]
+name = "emporio-musica-chatbot"
+version = "0.1.0"
+description = "Agente de atendimento (CLI) da loja Empório da Música"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "google-genai>=1.0.0",
+    "python-dotenv>=1.0.0",
+    "pydantic-settings>=2.4.0",
+    "typer>=0.12.0",
+    "rich>=13.7.0",
+]
+
+[project.optional-dependencies]
+# Dependências do sistema de RAG: vector store em memória (FAISS) e leitura
+# de PDF (pypdf). `chromadb` não é usado (ver `rag/chroma.py`, mantido só
+# como referência) — se for adotado no lugar do FAISS, adicionar de volta.
+rag = [
+    "faiss-cpu>=1.8.0",
+    "numpy>=1.26.0",
+    "pypdf>=4.0.0",
+]
+# Dependências para consulta a dados tabulares (catálogo, pedidos, clientes, promoções).
+data = [
+    "pandas>=2.2.0",
+]
+dev = [
+    "pytest>=8.0.0",
+    "ruff>=0.6.0",
+]
+
+[project.scripts]
+emporio-chatbot = "main:app"
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+# Layout "flat" a partir de `src/`: `agent`, `cli`, `rag`, `tabular_data`,
+# `memory`, `tools` e `utils` são pacotes; `config.py` e `main.py` são
+# módulos soltos. Todos ficam disponíveis como top-level imports (ex.:
+# `from config import get_settings`), sem um pacote "guarda-chuva".
+[tool.setuptools]
+package-dir = { "" = "src" }
+py-modules = ["config", "main"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
