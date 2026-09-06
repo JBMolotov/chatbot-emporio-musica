@@ -6,6 +6,8 @@ Este módulo implementa a interface `BaseConversationHistoryStore` para persist�
 from __future__ import annotations
 
 import json
+import os
+import re
 from datetime import datetime
 from pathlib import Path
 
@@ -52,6 +54,9 @@ class JsonConversationHistoryStore(BaseConversationHistoryStore):
             json_file_path.unlink()
 
     def _json_path(self, session_id: str) -> Path:
+        # Impede path traversal quando session_id vem de uma API.
+        if not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", session_id):
+            raise ValueError("session_id deve conter somente letras, números, '_' ou '-'.")
         return self.storage_dir / f"{session_id}.json"
 
     def _ensure_loaded(self, session_id: str) -> None:
@@ -88,5 +93,10 @@ class JsonConversationHistoryStore(BaseConversationHistoryStore):
             }
             for message in self.history[session_id]
         ]
-        with self._json_path(session_id).open("w", encoding="utf-8") as f:
+        destination = self._json_path(session_id)
+        temporary = destination.with_suffix(".json.tmp")
+        with temporary.open("w", encoding="utf-8") as f:
             json.dump(raw_messages, f, ensure_ascii=False, indent=4)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(temporary, destination)

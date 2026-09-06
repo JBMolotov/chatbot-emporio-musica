@@ -21,13 +21,22 @@ rag = [
     "numpy>=1.26.0",
     "pypdf>=4.0.0",
 ]
+chroma = [
+    "chromadb>=1.0.0,<2.0.0",
+]
 # Dependências para consulta a dados tabulares (catálogo, pedidos, clientes, promoções).
 data = [
     "pandas>=2.2.0",
 ]
+api = [
+    "fastapi>=0.115.0,<1.0.0",
+    "uvicorn>=0.30.0,<1.0.0",
+]
 dev = [
     "pytest>=8.0.0",
     "ruff>=0.6.0",
+    "httpx>=0.27.0",
+    "fastapi>=0.115.0,<1.0.0",
 ]
 
 [project.scripts]

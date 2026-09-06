@@ -27,6 +27,10 @@ def run_chat_loop(agent: EmporioMusicaAgent, console: Console | None = None) -> 
         "[bold]Empório da Música[/bold] - agente de atendimento (CLI)\n"
         "Digite sua mensagem ou 'sair' para encerrar.",
     )
+    contact = console.input("E-mail ou telefone (opcional, Enter para pular): ").strip()
+    if contact:
+        customer = agent.identify_customer(session_id=session_id, contact=contact)
+        console.print(f"Olá, {customer['name']}!" if customer else "Não localizei esse contato; seguimos sem identificação.")
 
     while True:
         try:

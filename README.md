@@ -253,72 +253,29 @@ modelo insistir em chamar tools.
 
 ---
 
-## Limitações conhecidas e próximos passos
+## Operação e limites de escala
 
-- **Busca de produtos é só por substring.** `search_products` casa
-  case-insensitive em `name`/`description`, mas não normaliza acento nem
-  plural/singular. Confirmado na prática ao gerar os transcripts em
-  [`conversas/`](conversas/): `"violão"` encontra 35 produtos, mas
-  `"violões"` (plural, a forma sugerida no próprio enunciado do desafio)
-  encontra 0 — um falso negativo real, não hipotético (detalhes em
-  [`conversas/README.md`](conversas/README.md)). Também ignora os
-  `**filters` que a interface já aceita (categoria, faixa de preço) — hoje
-  quem filtra por preço é o próprio modelo, raciocinando sobre a lista
-  completa que a tool devolve, o que funciona para um catálogo pequeno mas
-  não escalaria. Com mais tempo, trocaria por uma busca semântica
-  (embeddings sobre o catálogo, mesmo padrão do RAG de políticas) ou ao
-  menos normalização de acentos/plural + filtros estruturados reais.
-- **`InMemoryVectorStore.delete` reconstrói o índice inteiro**,
-  re-gerando embeddings via API para todos os documentos restantes, funciona
-  para um PDF pequeno, mas não escalaria para uma base de documentos maior.
-- **`refresh_index` duplica chunks em vez de substituí-los** (FAISS
-  `IndexFlatL2` só suporta `add`, não upsert/delete pontual), reindexar a
-  mesma fonte duas vezes duplica as entradas. Precisaria de uma estratégia
-  de remoção por `source` antes de reindexar.
-- **Sem streaming de resposta.** O CLI espera a resposta completa do
-  Gemini antes de imprimir. `generate_content_stream` resolveria isso e
-  melhoraria a percepção de latência.
-- **Histórico sem limite/janela de contexto.** Toda a conversa é
-  recarregada e reenviada ao modelo a cada turno; para sessões longas isso
-  cresce o custo e pode estourar o limite de tokens. Com mais tempo,
-  adicionaria truncamento (últimas N mensagens) ou sumarização incremental.
-- **Sem retries/backoff nas chamadas ao Gemini.** Uma falha transitória de
-  rede propaga como exceção não tratada (a única tolerância a erro hoje é
-  dentro da execução de tools, em `GeminiLLMClient._run_tool`).
-- **Sem teste automatizado contra a API real do Gemini** de propósito,
-  para manter a suíte rápida, determinística e sem custo/rede, mas isso
-  significa que uma mudança no formato do SDK só seria pega manualmente
-  (foi validado à mão durante o desenvolvimento, não há regressão automática).
-- **Só CLI.** Uma API HTTP (FastAPI, por exemplo) reaproveitando
-  `EmporioMusicaAgent` sem alterações seria o próximo passo natural para
-  expor isso além do terminal.
+O índice usa cosseno normalizado, chunking por sentença com overlap, fusão
+semântica/lexical, limiar de relevância, cache de embeddings, atualização por
+hash da fonte e persistência atômica em JSON/NPY (sem `pickle`). O catálogo
+normaliza acentos/plural e aplica filtros estruturados; todas as tools devolvem
+JSON estrito. O histórico é limitado por `MAX_HISTORY_MESSAGES` (20 por padrão)
+e arquivos de sessão não aceitam path traversal.
+
+Também há uma API FastAPI em `api.app:app`: instale `.[api]` e execute
+`uvicorn api.app:app`. Em produção, defina `APP_ENV=production` e `API_KEY`;
+sem chave a API recusa tráfego. A API key é um controle de borda mínimo, não
+substitui identidade/autorização por cliente: antes de expor pedidos ou dados
+pessoais publicamente, integre o provedor de autenticação e imponha ownership
+de pedido no backend.
+
+FAISS local continua intencional para um corpus pequeno e uma única réplica.
+Para alta disponibilidade, atualização concorrente ou milhões de chunks,
+substitua-o por um vector DB gerenciado/pgvector por trás de `BaseVectorStore`.
+Há também uma implementação pronta de Chroma em `rag.chroma.ChromaVectorStore`;
+instale `pip install -e ".[chroma]"` e injete-a no bootstrap se decidir usá-la.
+Os testes são determinísticos e não chamam Gemini; monitore a compatibilidade
+do SDK em staging e configure alertas a partir dos logs de tokens, latência e
+uso de tools.
 
 ---
-
-## Uso de assistente de IA
-
-Usei o **Claude Code** (Anthropic), rodando como extensão dentro do editor,
-durante o desenvolvimento. O padrão de uso foi parecido com trabalhar com um
-revisor/pair programmer teto a teto comigo:
-
-1. **Eu escrevia o código de cada módulo primeiro**
-   interfaces, classes concretas, wiring no `main.py`, e pedia pro Claude
-   **verificar e testar de verdade**, não só ler o código.
-2. Ele rodava o código contra os dados reais do desafio (CSVs, o PDF de
-   políticas, e a API do Gemini com uma key real) em vez de só inspecionar
-   visualmente, isso pegou bugs que uma leitura estática não pegaria: por
-   exemplo, `check_stock` lendo a chave errada do dict (`"stock"` em vez de
-   `"stock_quantity"`), `NaN` do pandas vazando pra respostas que
-   precisavam ser JSON válido, um `Retriever.search()` chamando um método
-   que não existia, e o formato real do SDK `google-genai` para embeddings
-   e function calling (que eu tinha assumido errado de início, ele
-   inspecionou o pacote instalado e testou contra a API antes de sugerir
-   alterações, em vez de confiar só em memória de treinamento).
-3. Ele validou o formato exato do SDK com chamadas reais passo a passo
-   (texto simples → uma function call isolada → o loop completo).
-   fomos mordidos duas vezes por assumir o shape errado da API, então essa
-   virou a exigência: nada de assumir formato de SDK sem confirmar.
-4. Usei pra escrever a suíte de testes junto de cada módulo, cada bug
-   encontrado testando manualmente virou um teste de regressão.
-5. Também usei pra revisar o README, sugerindo melhorias de clareza e
-   completude.

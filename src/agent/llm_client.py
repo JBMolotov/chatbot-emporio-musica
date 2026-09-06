@@ -6,6 +6,7 @@ lugar, para que `agent.core` dependa apenas desta interface.
 
 from __future__ import annotations
 
+from time import perf_counter
 from typing import TYPE_CHECKING, Any
 
 from google import genai
@@ -39,6 +40,8 @@ class GeminiLLMClient:
 
     def __init__(self, settings: Settings | None = None) -> None:
         self._settings = settings or get_settings()
+        if not self._settings.google_api_key:
+            raise ValueError("GOOGLE_API_KEY não configurada. Copie .env.example para .env e informe a chave.")
         self._client = genai.Client(api_key=self._settings.google_api_key)
 
     def create_embedding(self, text: str, model: EmbeddingModel | None = None) -> list[float]:
@@ -52,12 +55,15 @@ class GeminiLLMClient:
             Embedding como lista de floats.
         """
         model_to_use = model or self._settings.gemini_embedding_model
-        response = self._client.models.embed_content(
-            model=model_to_use,
-            contents=text,
-            config={"output_dimensionality": self._settings.gemini_embedding_dim},
-        )
-        return response.embeddings[0].values
+        try:
+            response = self._client.models.embed_content(
+                model=model_to_use, contents=text,
+                config={"output_dimensionality": self._settings.gemini_embedding_dim},
+            )
+            embedding = response.embeddings[0].values
+        except (AttributeError, IndexError, TypeError) as exc:
+            raise RuntimeError("O provedor não retornou um embedding válido.") from exc
+        return list(embedding)
 
     def generate_response(
         self,
@@ -90,17 +96,26 @@ class GeminiLLMClient:
             else None,
         )
 
-        for _ in range(_MAX_FUNCTION_CALL_ROUNDS):
-            response = self._client.models.generate_content(
-                model=self._settings.gemini_model,
-                contents=contents,
-                config=config,
-            )
-            candidate_content = response.candidates[0].content
+        for round_number in range(_MAX_FUNCTION_CALL_ROUNDS):
+            started = perf_counter()
+            try:
+                response = self._client.models.generate_content(
+                    model=self._settings.gemini_model, contents=contents, config=config,
+                )
+                candidate_content = response.candidates[0].content
+            except (AttributeError, IndexError, TypeError) as exc:
+                raise RuntimeError("O modelo não retornou uma resposta utilizável. Tente novamente.") from exc
+            usage = getattr(response, "usage_metadata", None)
+            logger.info("llm_call round=%s latency_ms=%d prompt_tokens=%s output_tokens=%s",
+                        round_number + 1, int((perf_counter() - started) * 1000),
+                        getattr(usage, "prompt_token_count", None), getattr(usage, "candidates_token_count", None))
             function_calls = [part.function_call for part in candidate_content.parts if part.function_call]
 
             if not function_calls:
-                return response.text
+                text = getattr(response, "text", None)
+                if not text:
+                    raise RuntimeError("O modelo não retornou texto nem chamada de ferramenta.")
+                return text
 
             contents.append(candidate_content)
             contents.append(
@@ -128,8 +143,13 @@ class GeminiLLMClient:
         tool = tools_by_name.get(call.name)
         if tool is None:
             return {"error": f"Ferramenta '{call.name}' não existe."}
+        started = perf_counter()
         try:
-            return tool.run(**(call.args or {}))
+            result = tool.run(**(call.args or {}))
+            logger.info("tool_call name=%s success=true latency_ms=%d", call.name, int((perf_counter() - started) * 1000))
+            return result
         except Exception as exc:  # ferramenta com input inválido, dado inexistente etc.
-            logger.warning("Ferramenta '%s' falhou com args=%r: %s", call.name, call.args, exc)
-            return {"error": str(exc)}
+            # Não logar argumentos: podem conter identificadores pessoais.
+            logger.warning("tool_call name=%s success=false latency_ms=%d error=%s", call.name,
+                           int((perf_counter() - started) * 1000), type(exc).__name__)
+            return {"error": "Não foi possível consultar essa informação com os parâmetros informados."}

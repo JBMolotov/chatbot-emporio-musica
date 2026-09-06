@@ -62,7 +62,7 @@ class TestInMemoryVectorStore:
         results = store.similarity_search("troca e devolução de produtos", top_k=2)
 
         assert [doc.id for doc in results] == ["near", "far"]
-        assert results[0].score == pytest.approx(0.0, abs=1e-6)
+        assert results[0].score == pytest.approx(1.0, abs=1e-6)
 
     def test_similarity_search_respects_top_k(self, settings: Settings) -> None:
         store = InMemoryVectorStore(embedding_dim=8, settings=settings)
@@ -101,6 +101,19 @@ class TestInMemoryVectorStore:
         assert [doc.id for doc in store.documents_by_index] == ["keep"]
         assert store.index.ntotal == 1
 
+    def test_store_replaces_same_document_id(self, settings: Settings) -> None:
+        store = InMemoryVectorStore(embedding_dim=8, settings=settings)
+        store.store_embedding(store.create_embedding("primeira"), VectorDocument(id="same", text="primeira"))
+        store.store_embedding(store.create_embedding("segunda"), VectorDocument(id="same", text="segunda"))
+        assert [document.text for document in store.documents_by_index] == ["segunda"]
+
+    def test_search_does_not_mutate_stored_document_score(self, settings: Settings) -> None:
+        store = InMemoryVectorStore(embedding_dim=8, settings=settings)
+        document = VectorDocument(id="a", text="texto")
+        store.store_embedding(store.create_embedding(document.text), document)
+        store.similarity_search("texto")
+        assert store.documents_by_index[0].score is None
+
 
 class _FakeIndexer(BaseIndexer):
     """Indexer de teste: devolve documentos fixos em vez de ler um arquivo real."""
@@ -121,21 +134,19 @@ class TestBaseIndexer:
 
         chunks = indexer._chunk_document(document)
 
-        assert [c.text for c in chunks] == ["primeiro parágrafo", "segundo parágrafo"]
-        # O índice usado no id vem do `enumerate` dos parágrafos brutos (antes do
-        # filtro de vazios), então não fica denso: o parágrafo vazio no meio
-        # consome o índice 1.
-        assert [c.id for c in chunks] == ["doc_chunk_0", "doc_chunk_2"]
+        assert [c.text for c in chunks] == ["primeiro parágrafo\nsegundo parágrafo"]
+        assert [c.id for c in chunks] == ["doc_chunk_0"]
 
     def test_index_documents_stores_one_embedding_per_chunk(self, settings: Settings, tmp_path: Path) -> None:
         store = InMemoryVectorStore(embedding_dim=8, settings=settings)
         raw = [VectorDocument(id="doc", text="um parágrafo\n\noutro parágrafo")]
         indexer = _FakeIndexer(store, raw)
         source_path = tmp_path / "fonte.txt"
+        source_path.write_text("fonte", encoding="utf-8")
 
         indexer.index_documents(source_path)
 
-        assert len(store.documents_by_index) == 2
+        assert len(store.documents_by_index) == 1
         assert source_path in indexer._indexed_sources
 
     def test_refresh_index_reprocesses_already_indexed_sources(self, settings: Settings, tmp_path: Path) -> None:
@@ -143,13 +154,12 @@ class TestBaseIndexer:
         raw = [VectorDocument(id="doc", text="um parágrafo")]
         indexer = _FakeIndexer(store, raw)
         source_path = tmp_path / "fonte.txt"
+        source_path.write_text("fonte", encoding="utf-8")
         indexer.index_documents(source_path)
 
         indexer.refresh_index()
 
-        # Limitação conhecida: o FAISS em memória só permite `add`, então
-        # reprocessar duplica os chunks em vez de substituí-los.
-        assert len(store.documents_by_index) == 2
+        assert len(store.documents_by_index) == 1
 
 
 class TestPdfPolicyIndexer:
@@ -175,3 +185,9 @@ class TestRetriever:
         results = retriever.retrieve("política de troca em até 30 dias", top_k=1)
 
         assert [doc.id for doc in results] == ["a"]
+
+    def test_filters_low_similarity(self, settings: Settings) -> None:
+        store = InMemoryVectorStore(embedding_dim=8, settings=settings)
+        document = VectorDocument(id="a", text="política de troca")
+        store.store_embedding(store.create_embedding(document.text), document)
+        assert Retriever(store, min_similarity=1.0).retrieve("assunto distante") == []

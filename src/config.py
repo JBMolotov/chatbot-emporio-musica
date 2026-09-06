@@ -28,7 +28,7 @@ class Settings(BaseSettings):
         ),
     )
     gemini_max_output_tokens: int = Field(
-        default=1024,
+        default=1024, ge=64, le=8192,
         description="Máximo de tokens de saída por resposta do agente",
     )
     gemini_embedding_model: str = Field(
@@ -36,7 +36,7 @@ class Settings(BaseSettings):
         description="ID do modelo Gemini usado para gerar embeddings (RAG).",
     )
     gemini_embedding_dim: int = Field(
-        default=768,
+        default=768, ge=128, le=3072,
         description=(
             "Dimensão solicitada dos vetores de embedding via "
             "`output_dimensionality` (o modelo `gemini-embedding-001` "
@@ -55,11 +55,21 @@ class Settings(BaseSettings):
     data_dir: Path = Field(default=Path("data"))
     policies_pdf_path: Path = Field(default=Path("data/políticas.pdf"))
 
-    # --- RAG (futuro) ----------------------------------------------------------
+    # --- RAG -----------------------------------------------------------------
     vector_store_path: Path = Field(default=Path("storage/vector_store"))
+    rag_chunk_size: int = Field(default=900, ge=200, le=4000)
+    rag_chunk_overlap: int = Field(default=120, ge=0, le=1000)
+    rag_top_k: int = Field(default=4, ge=1, le=20)
+    rag_min_similarity: float = Field(default=0.55, ge=0.0, le=1.0)
+    embedding_cache_size: int = Field(default=256, ge=0, le=10000)
 
-    # --- Histórico de conversas (futuro) -----------------------------------------
+    # --- Histórico de conversas ----------------------------------------------
     conversation_history_path: Path = Field(default=Path("storage/conversation_history"))
+    max_history_messages: int = Field(default=20, ge=0, le=200)
+    max_message_characters: int = Field(default=8000, ge=100, le=50000)
+
+    # --- API -----------------------------------------------------------------
+    api_key: str = Field(default="", repr=False)
 
 
 def get_settings() -> Settings:

@@ -1,0 +1,1 @@
+"""Canal HTTP da aplicação."""
