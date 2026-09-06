@@ -83,3 +83,8 @@ class TestClearSession:
         second_process.clear_session("s1")
 
         assert not (tmp_path / "s1.json").exists()
+
+    def test_rejects_path_traversal_session_id(self, store: JsonConversationHistoryStore) -> None:
+        import pytest
+        with pytest.raises(ValueError):
+            store.get_history("../outside")

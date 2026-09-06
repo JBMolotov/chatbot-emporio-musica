@@ -6,6 +6,7 @@ valores fixos), para não quebrar se os CSVs de `data/` mudarem.
 
 from __future__ import annotations
 
+import json
 import pytest
 
 from config import get_settings
@@ -23,23 +24,29 @@ class TestSearchProducts:
 
         results = service.search_products(query)
 
-        assert not results.empty
-        matches_name = results["name"].str.contains(query, case=False)
-        matches_description = results["description"].str.contains(query, case=False, na=False)
-        assert (matches_name | matches_description).all()
+        assert results
+        assert all(query in item["name"].lower() or query in item["description"].lower() for item in results)
 
     def test_finds_by_description_when_name_does_not_match(self, service: PandasTabularDataService) -> None:
         # "Violão" não aparece em nenhum `name` (os produtos são nomeados por
         # marca/modelo), só em `description` — cobre a busca combinada.
         results = service.search_products("violão")
 
-        assert not results.empty
-        assert results["description"].str.contains("violão", case=False, na=False).all()
+        assert results
+        assert all("violão" in item["description"].lower() for item in results)
 
     def test_no_match_returns_empty(self, service: PandasTabularDataService) -> None:
         results = service.search_products("xxxxxxxxxxxxnaoexiste")
 
-        assert results.empty
+        assert results == []
+
+    def test_normalizes_accents_plural_and_applies_price_filter(self, service: PandasTabularDataService) -> None:
+        results = service.search_products("violoes", max_price=500)
+        assert results
+        assert all(product["price_brl"] <= 500 for product in results)
+
+    def test_literal_special_characters_do_not_raise_regex_error(self, service: PandasTabularDataService) -> None:
+        assert service.search_products("50W+") == []
 
 
 class TestGetProductById:
@@ -71,8 +78,8 @@ class TestGetActivePromotions:
     def test_only_returns_active_promotions(self, service: PandasTabularDataService) -> None:
         promotions = service.get_active_promotions()
 
-        assert not promotions.empty
-        assert (promotions["is_active"] == 1).all()
+        assert promotions
+        assert all(item["is_active"] == 1 for item in promotions)
 
     def test_filters_by_product_id(self, service: PandasTabularDataService) -> None:
         active_row = service.promotions_df[service.promotions_df["is_active"] == 1].iloc[0]
@@ -80,8 +87,8 @@ class TestGetActivePromotions:
 
         promotions = service.get_active_promotions(product_id=product_id)
 
-        assert not promotions.empty
-        assert (promotions["product_id"] == product_id).all()
+        assert promotions
+        assert all(item["product_id"] == product_id for item in promotions)
 
 
 class TestGetCustomerOrders:
@@ -90,8 +97,18 @@ class TestGetCustomerOrders:
 
         orders = service.get_customer_orders(customer_id)
 
-        assert not orders.empty
-        assert (orders["customer_id"] == customer_id).all()
+        assert orders
+        assert all(item["customer_id"] == customer_id for item in orders)
+        assert all("items" in item for item in orders)
+        json.dumps(orders, allow_nan=False)
+
+
+class TestCustomerLookup:
+    def test_finds_customer_by_normalized_phone(self, service: PandasTabularDataService) -> None:
+        row = service.customers_df.iloc[0]
+        customer = service.get_customer_by_contact(str(row["phone"]).replace(" ", ""))
+        assert customer is not None
+        assert customer["customer_id"] == row["customer_id"]
 
 
 class TestGetOrderStatus:

@@ -97,12 +97,25 @@ def test_handle_message_persists_user_and_assistant_turns(tmp_path: Path) -> Non
     ]
 
 
+def test_handle_message_respects_history_limit() -> None:
+    llm_client = _FakeLLMClient()
+    history = [ConversationMessage(MessageRole.USER, str(i), datetime.now()) for i in range(30)]
+    history_store = _FakeHistoryStoreWithFixedHistory(history)
+    from config import Settings
+    agent = EmporioMusicaAgent(AgentDependencies(
+        llm_client=llm_client, history_store=history_store, settings=Settings(max_history_messages=2)
+    ))
+    agent.handle_message(session_id="s1", user_message="nova")
+    assert history_store.last_limit == 2
+
+
 class _FakeHistoryStoreWithFixedHistory:
     def __init__(self, history: list[ConversationMessage]) -> None:
         self._history = history
 
     def get_history(self, session_id: str, limit: int | None = None) -> list[ConversationMessage]:
-        return self._history
+        self.last_limit = limit
+        return self._history[-limit:] if limit else self._history
 
     def add_message(self, session_id: str, message: ConversationMessage) -> None:
         pass
